@@ -38,7 +38,6 @@
     <button id="zoomOut" title="Thu nhỏ">−</button>
     <span id="zoomLbl">100%</span>
     <button id="zoomIn" title="Phóng to">+</button>
-    <a id="download" target="_blank" rel="noopener">Mở / tải PDF ↗</a>
   </div>
 </header>
 <div id="status">Đang tải tài liệu…</div>
@@ -66,13 +65,12 @@
     if (i === current) return;
     current = i;
     const url = encodeURIComponent(docs[i].file);
-    $("download").href = url;
     document.title = docs[i].name + " · Kế hoạch thi công";
     [...tabs.children].forEach((b, j) => b.setAttribute("aria-selected", j === i));
     history.replaceState(null, "", "#" + i);
     pagesEl.innerHTML = ""; statusEl.textContent = "Đang tải tài liệu…"; statusEl.hidden = false;
     pdfjsLib.getDocument(url).promise.then(p => { pdf = p; statusEl.hidden = true; render(); })
-      .catch(() => { statusEl.innerHTML = 'Không hiển thị được PDF. <a style="color:#9cf" href="' + url + '">Bấm để mở trực tiếp</a>.'; });
+      .catch(() => { statusEl.textContent = "Không hiển thị được tài liệu. Vui lòng tải lại trang."; });
   }
 
   async function render() {
@@ -104,6 +102,7 @@
   });
   $("zoomIn").onclick = () => { zoom = Math.min(zoom + 0.25, 3); render(); };
   $("zoomOut").onclick = () => { zoom = Math.max(zoom - 0.25, 0.5); render(); };
+  pagesEl.addEventListener("contextmenu", e => e.preventDefault());
   let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 250); });
 
   const start = parseInt(location.hash.slice(1), 10);
