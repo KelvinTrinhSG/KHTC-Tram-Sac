@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kế hoạch thi công trạm sạc</title>
+<style>
+  :root { --bg:#eef0f3; --panel:#fff; --text:#1d2433; --muted:#6b7385; --accent:#0b6bcb; --line:#dde1e8; --page-bg:#525659; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) { --bg:#14171c; --panel:#1d2128; --text:#e6e9ef; --muted:#9aa3b2; --accent:#5aa9ff; --line:#2e343e; --page-bg:#2a2d33; }
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; background:var(--page-bg); color:var(--text);
+    font-family:"Segoe UI", system-ui, -apple-system, sans-serif; }
+  header { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:10px 14px; flex-wrap:wrap;
+    padding:10px 16px; background:var(--panel); border-bottom:1px solid var(--line); box-shadow:0 1px 4px rgba(0,0,0,.12); }
+  h1 { font-size:16px; margin:0; }
+  .tabs { display:flex; gap:6px; flex-wrap:wrap; }
+  .tab { border:1px solid var(--line); background:transparent; color:var(--text);
+    padding:7px 14px; border-radius:6px; cursor:pointer; font-size:14px; font-family:inherit; }
+  .tab[aria-selected="true"] { background:var(--accent); border-color:var(--accent); color:#fff; }
+  .tools { margin-left:auto; display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+  .tools button { border:1px solid var(--line); background:transparent; color:var(--text);
+    width:30px; height:30px; border-radius:6px; cursor:pointer; font-size:16px; }
+  .tools a { color:var(--accent); text-decoration:none; margin-left:8px; }
+  .tools a:hover { text-decoration:underline; }
+  #pages { display:flex; flex-direction:column; align-items:center; gap:12px; padding:16px 16px 40px; }
+  #pages canvas { display:block; max-width:100%; height:auto; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  #status { color:#e6e9ef; padding:40px 16px; text-align:center; }
+  @media (max-width:600px) { .tools { margin-left:0; width:100%; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Kế hoạch thi công trạm sạc</h1>
+  <div class="tabs" role="tablist" id="tabs"></div>
+  <div class="tools">
+    <button id="zoomOut" title="Thu nhỏ">−</button>
+    <span id="zoomLbl">100%</span>
+    <button id="zoomIn" title="Phóng to">+</button>
+    <a id="download" target="_blank" rel="noopener">Mở / tải PDF ↗</a>
+  </div>
+</header>
+<div id="status">Đang tải tài liệu…</div>
+<div id="pages"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  const docs = [
+    { name: "Trạm sạc Bình Triệu", file: "261119 KHTC TRạm Sạc BìnH TRIệu.pdf" },
+    { name: "6 trạm sạc - KV Miền Nam", file: "261119 KHTC 6 TRẠM SẠC XE ĐIỆN - KV MIỀN NAM.pdf" }
+  ];
+  const $ = id => document.getElementById(id);
+  const tabs = $("tabs"), pagesEl = $("pages"), statusEl = $("status");
+  let current = -1, pdf = null, zoom = 1, renderToken = 0;
+
+  function show(i) {
+    if (i === current) return;
+    current = i;
+    const url = encodeURIComponent(docs[i].file);
+    $("download").href = url;
+    document.title = docs[i].name + " · Kế hoạch thi công";
+    [...tabs.children].forEach((b, j) => b.setAttribute("aria-selected", j === i));
+    history.replaceState(null, "", "#" + i);
+    pagesEl.innerHTML = ""; statusEl.textContent = "Đang tải tài liệu…"; statusEl.hidden = false;
+    pdfjsLib.getDocument(url).promise.then(p => { pdf = p; statusEl.hidden = true; render(); })
+      .catch(() => { statusEl.innerHTML = 'Không hiển thị được PDF. <a style="color:#9cf" href="' + url + '">Bấm để mở trực tiếp</a>.'; });
+  }
+
+  async function render() {
+    if (!pdf) return;
+    const token = ++renderToken;
+    pagesEl.innerHTML = "";
+    $("zoomLbl").textContent = Math.round(zoom * 100) + "%";
+    const avail = Math.min(pagesEl.clientWidth - 32, 1600);
+    const dpr = window.devicePixelRatio || 1;
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      if (token !== renderToken) return;
+      const base = page.getViewport({ scale: 1 });
+      const scale = (avail / base.width) * zoom;
+      const vp = page.getViewport({ scale: scale * dpr });
+      const c = document.createElement("canvas");
+      c.width = vp.width; c.height = vp.height;
+      c.style.width = (vp.width / dpr) + "px";
+      pagesEl.appendChild(c);
+      await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
+    }
+  }
+
+  docs.forEach((d, i) => {
+    const b = document.createElement("button");
+    b.className = "tab"; b.setAttribute("role", "tab"); b.textContent = d.name;
+    b.onclick = () => show(i);
+    tabs.appendChild(b);
+  });
+  $("zoomIn").onclick = () => { zoom = Math.min(zoom + 0.25, 3); render(); };
+  $("zoomOut").onclick = () => { zoom = Math.max(zoom - 0.25, 0.5); render(); };
+  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 250); });
+
+  const start = parseInt(location.hash.slice(1), 10);
+  show(start >= 0 && start < docs.length ? start : 0);
+</script>
+</body>
+</html>
