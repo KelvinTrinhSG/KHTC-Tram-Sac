@@ -24,8 +24,8 @@
     width:30px; height:30px; border-radius:6px; cursor:pointer; font-size:16px; }
   .tools a { color:var(--accent); text-decoration:none; margin-left:8px; }
   .tools a:hover { text-decoration:underline; }
-  #pages { display:flex; flex-direction:column; align-items:center; gap:12px; padding:16px 16px 40px; }
-  #pages canvas { display:block; max-width:100%; height:auto; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.35); }
+  #pages { display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:16px 16px 40px; overflow-x:auto; }
+  #pages canvas { display:block; flex:none; margin:0 auto; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.35); }
   #status { color:#e6e9ef; padding:40px 16px; text-align:center; }
   @media (max-width:600px) { .tools { margin-left:0; width:100%; } }
 </style>
