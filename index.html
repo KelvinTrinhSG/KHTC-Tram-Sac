@@ -24,7 +24,10 @@
     width:30px; height:30px; border-radius:6px; cursor:pointer; font-size:16px; }
   .tools a { color:var(--accent); text-decoration:none; margin-left:8px; }
   .tools a:hover { text-decoration:underline; }
-  #pages { display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:16px 16px 40px; overflow-x:auto; }
+  html, body { overflow:hidden; }
+  #pages { display:flex; flex-direction:column; align-items:flex-start; gap:12px; padding:16px; overflow:auto;
+    cursor:grab; touch-action:pan-x pan-y; overscroll-behavior:contain; }
+  #pages.drag { cursor:grabbing; user-select:none; }
   #pages canvas { display:block; flex:none; margin:0 auto; background:#fff; box-shadow:0 2px 8px rgba(0,0,0,.35); }
   #status { color:#e6e9ef; padding:40px 16px; text-align:center; }
   @media (max-width:600px) { .tools { margin-left:0; width:100%; } }
@@ -58,6 +61,7 @@
     { name: "Thuận An", file: "261119 KHTC Trạm Sạc Thuận An.pdf" }
   ];
   const $ = id => document.getElementById(id);
+  let rt;
   const tabs = $("tabs"), pagesEl = $("pages"), statusEl = $("status");
   let current = -1, pdf = null, zoom = 1, renderToken = 0;
 
@@ -73,26 +77,63 @@
       .catch(() => { statusEl.textContent = "Không hiển thị được tài liệu. Vui lòng tải lại trang."; });
   }
 
+  function fitHeight() {
+    pagesEl.style.height = Math.max(240, innerHeight - pagesEl.getBoundingClientRect().top) + "px";
+  }
+
+  // vẽ lại theo mức zoom, giữ nguyên điểm đang xem ở giữa khung
   async function render() {
     if (!pdf) return;
     const token = ++renderToken;
-    pagesEl.innerHTML = "";
+    fitHeight();
+    const el = pagesEl, had = el.querySelector("canvas") !== null;
+    const cx = had ? (el.scrollLeft + el.clientWidth / 2) / el.scrollWidth : 0.5;
+    const cy = had ? (el.scrollTop + el.clientHeight / 2) / el.scrollHeight : 0;
     $("zoomLbl").textContent = Math.round(zoom * 100) + "%";
-    const avail = Math.min(pagesEl.clientWidth - 32, 1600);
+    const avail = Math.min(el.clientWidth - 32, 1600);
     const dpr = window.devicePixelRatio || 1;
+    const pages = [];
     for (let n = 1; n <= pdf.numPages; n++) {
       const page = await pdf.getPage(n);
       if (token !== renderToken) return;
-      const base = page.getViewport({ scale: 1 });
-      const scale = (avail / base.width) * zoom;
+      const scale = (avail / page.getViewport({ scale: 1 }).width) * zoom;
       const vp = page.getViewport({ scale: scale * dpr });
       const c = document.createElement("canvas");
       c.width = vp.width; c.height = vp.height;
-      c.style.width = (vp.width / dpr) + "px";
-      pagesEl.appendChild(c);
+      c.style.width = (vp.width / dpr) + "px"; c.style.height = (vp.height / dpr) + "px";
+      pages.push([page, vp, c]);
+    }
+    el.replaceChildren(...pages.map(p => p[2]));
+    el.scrollLeft = cx * el.scrollWidth - el.clientWidth / 2;
+    el.scrollTop = cy * el.scrollHeight - el.clientHeight / 2;
+    for (const [page, vp, c] of pages) {
+      if (token !== renderToken) return;
       await page.render({ canvasContext: c.getContext("2d"), viewport: vp }).promise;
     }
   }
+
+  // kéo chuột để di chuyển (pan); trên điện thoại vuốt một ngón là di chuyển
+  let drag = null;
+  pagesEl.addEventListener("pointerdown", e => {
+    if (e.pointerType !== "mouse" || e.button !== 0) return;
+    drag = { x: e.clientX, y: e.clientY, l: pagesEl.scrollLeft, t: pagesEl.scrollTop };
+    pagesEl.classList.add("drag"); pagesEl.setPointerCapture(e.pointerId);
+  });
+  pagesEl.addEventListener("pointermove", e => {
+    if (!drag) return;
+    pagesEl.scrollLeft = drag.l - (e.clientX - drag.x);
+    pagesEl.scrollTop = drag.t - (e.clientY - drag.y);
+  });
+  const endDrag = () => { drag = null; pagesEl.classList.remove("drag"); };
+  pagesEl.addEventListener("pointerup", endDrag);
+  pagesEl.addEventListener("pointercancel", endDrag);
+  // Ctrl + lăn chuột để phóng to / thu nhỏ
+  pagesEl.addEventListener("wheel", e => {
+    if (!e.ctrlKey) return;
+    e.preventDefault();
+    zoom = Math.min(3, Math.max(0.5, zoom + (e.deltaY < 0 ? 0.25 : -0.25)));
+    clearTimeout(rt); rt = setTimeout(render, 120);
+  }, { passive: false });
 
   docs.forEach((d, i) => {
     const b = document.createElement("button");
@@ -103,7 +144,7 @@
   $("zoomIn").onclick = () => { zoom = Math.min(zoom + 0.25, 3); render(); };
   $("zoomOut").onclick = () => { zoom = Math.max(zoom - 0.25, 0.5); render(); };
   pagesEl.addEventListener("contextmenu", e => e.preventDefault());
-  let rt; addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 250); });
+  addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 250); });
 
   const start = parseInt(location.hash.slice(1), 10);
   show(start >= 0 && start < docs.length ? start : 0);
